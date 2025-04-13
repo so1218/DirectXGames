@@ -2,6 +2,9 @@
 #include <cstdint>
 #include <string>
 #include <format>
+#include <filesystem>
+#include <fstream>
+#include <chrono>
 
 // ウィンドウプロシージャ
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -20,8 +23,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     return DefWindowProc(hwnd, msg, wParam, lParam);
 }
 
-void Log(const std::string& message)
+void Log(const std::string& message, std::ostream& os)
 {
+    os << message << std::endl;
     OutputDebugStringA(message.c_str());
 }
 
@@ -29,6 +33,22 @@ void Log(const std::string& message)
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) 
 {
+    // ログのディレクトリを用意
+    std::filesystem::create_directory("logs");
+
+    // 現在時刻を取得
+    std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
+    std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds> nowSeconds =
+        std::chrono::time_point_cast<std::chrono::seconds>(now);
+    std::chrono::zoned_time localTime{ std::chrono::current_zone(), nowSeconds };
+
+    // formatを使って年月日_時分秒の文字列に変換
+    std::string dateString = std::format("{:%Y%m%d_%H%M%S}", localTime);
+    std::string logFilePath = std::string("logs/") + dateString + ".log";
+
+    // ファイルを作って書き込み準備
+    std::ofstream logStream(logFilePath);
+
     // クライアント領域のサイズ
     const int32_t kClientWidth = 1280;
     const int32_t kClientHeight = 720;
