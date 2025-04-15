@@ -122,7 +122,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     // 現在時刻を取得
     std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
     std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds> nowSeconds =
-        std::chrono::time_point_cast<std::chrono::seconds>(now);
+    std::chrono::time_point_cast<std::chrono::seconds>(now);
     std::chrono::zoned_time localTime{ std::chrono::current_zone(), nowSeconds };
 
     // formatを使って年月日_時分秒の文字列に変換
@@ -169,6 +169,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
         wc.hInstance,
         nullptr
     );
+
+    // デバッグレイヤー
+#ifdef _DEBUG
+    ID3D12Debug1* debugController = nullptr;
+    if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController))))
+    {
+        // デバッグレイヤーを有効にする
+        debugController->EnableDebugLayer();
+        // さらにGPU側でもチェックを行うようにする
+        debugController->SetEnableGPUBasedValidation(TRUE);
+    }
+#endif
 
     // ウィンドウを表示する
     ShowWindow(hwnd, SW_SHOW);
@@ -227,6 +239,39 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     // デバイスの生成がうまくいかなかったので起動できない
     assert(device != nullptr);
     Log("Complete create D3D12Device!!!\n", logStream);// 初期化完了のログを出す
+
+#ifdef _DEBUG
+	ID3D12InfoQueue* infoQueue = nullptr;
+	if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&infoQueue))))
+	{
+		// やばいエラー時に止まる
+		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
+        // エラー時に止まる
+		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
+		// 警告時に止まる
+		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, TRUE);
+        // 抑制するメッセージのID
+        D3D12_MESSAGE_ID denyIds[] =
+        {
+            // Windows11でのDXGIデバッグレイヤーとDX12デバッグレイヤーの相互作用バグによるエラーメッセージ
+            D3D12_MESSAGE_ID_RESOURCE_BARRIER_MISMATCHING_COMMAND_LIST_TYPE
+        };
+        // 抑制するレベル
+		D3D12_MESSAGE_SEVERITY severities[] =
+		{
+			D3D12_MESSAGE_SEVERITY_INFO
+		};
+		D3D12_INFO_QUEUE_FILTER filter{};
+		filter.DenyList.NumIDs = _countof(denyIds);
+		filter.DenyList.pIDList = denyIds;
+		filter.DenyList.NumSeverities = _countof(severities);
+		filter.DenyList.pSeverityList = severities;
+        // 指定したメッセージの表示を抑制する
+		infoQueue->PushStorageFilter(&filter);
+        // 解放
+		infoQueue->Release();
+	}
+#endif
 
     // 適切なアダプタが見つからなかったので起動できない
     assert(useAdapter != nullptr);
@@ -388,5 +433,4 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
 	return 0;
 }
-
 
