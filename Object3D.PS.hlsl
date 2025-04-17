@@ -13,6 +13,7 @@ struct PixelShaderOutput
 struct PixelShaderInput
 {
     float4 position : SV_POSITION;
+    float2 texcoord : TEXCOORD0;
 };
 
 PixelShaderOutput main(PixelShaderInput input)
