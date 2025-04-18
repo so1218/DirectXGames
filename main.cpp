@@ -855,18 +855,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
     // RTV用のヒープでディスクリプタの数は2。RTVはShader内で触るものではないので、ShaderVisibleはfalse
     ID3D12DescriptorHeap* rtvDescriptorHeap = CreateDescripterHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 2, false);
-    //D3D12_DESCRIPTOR_HEAP_DESC rtvDescriptorHeapDesc{};
-    //// レンダーターゲットビュー用
-    //rtvDescriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-    //// ダブルバッファ用に二つ。
-    //rtvDescriptorHeapDesc.NumDescriptors = 2;
-    //hr = device->CreateDescriptorHeap(
-    //    &rtvDescriptorHeapDesc,
-    //    IID_PPV_ARGS(&rtvDescriptorHeap)
-    //);
-
-    //// ディスクリプタヒープが作れなかったので起動できない
-    //assert(SUCCEEDED(hr));
 
     // SRV用のヒープでディスクリプタの数は128。SRVはShader内で触るものなので、ShaderVisibleはtrue
     ID3D12DescriptorHeap* srvDescriptorHeap = CreateDescripterHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 128, true);
@@ -932,6 +920,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
 	assert(SUCCEEDED(hr));
 
+    // DescriptorRangeの設定
     D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
     descriptorRange[0].BaseShaderRegister = 0;// 0から始まる
     descriptorRange[0].NumDescriptors = 1;// 数は1つ
@@ -958,6 +947,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     descriptionRootSignature.pParameters = rootParameters;// ルートパラメータ配列へのポインタ
     descriptionRootSignature.NumParameters = _countof(rootParameters);// 配列の長さ
 
+    // Samplerの設定
     D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
     staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;// バイリニアフィルタ
     staticSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;// 0～1の範囲外をリピート
