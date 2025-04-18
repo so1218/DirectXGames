@@ -1,3 +1,5 @@
+#include "Object3D.hlsli"
+
 struct Material
 {
     float4 color;
@@ -16,7 +18,7 @@ struct PixelShaderInput
     float2 texcoord : TEXCOORD0;
 };
 
-PixelShaderOutput main(PixelShaderInput input)
+PixelShaderOutput main(VertexShaderOutput input)
 {
     PixelShaderOutput output;
     output.color = gMaterial.color;
