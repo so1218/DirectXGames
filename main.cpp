@@ -1057,7 +1057,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     assert(SUCCEEDED(hr));
 
     // vertexResourceの作成
-    ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 3);
+    ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 6);
     // マテリアル用のリソースを作る。今回はcolor1つ分のサイズを用意する
     ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(VertexData));
     // Spraite用の頂点リソースを作る
@@ -1093,7 +1093,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     // リソースの先頭のアドレスから使う
     vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
     // 使用するリソースのサイズは頂点3つ分のサイズ
-    vertexBufferView.SizeInBytes = sizeof(VertexData) * 3;
+    vertexBufferView.SizeInBytes = sizeof(VertexData) * 6;
     // 1頂点あたりのサイズ
     vertexBufferView.StrideInBytes = sizeof(VertexData);
 
@@ -1116,6 +1116,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     // 右下
     vertexData[2].position = { 0.5f,-0.5f,0.0f,1.0f };
     vertexData[2].texcoord = { 1.0f,1.0f };
+
+    // 左下2
+    vertexData[3].position = { -0.5f,-0.5f,0.5f,1.0f };
+    vertexData[3].texcoord = { 0.0f,1.0f };
+    // 上2
+    vertexData[4].position = { 0.0f,0.0f,0.0f,1.0f };
+    vertexData[4].texcoord = { 0.5f,0.0f };
+    // 右下2
+    vertexData[5].position = { 0.5f,-0.5f,-0.5f,1.0f };
+    vertexData[5].texcoord = { 1.0f,1.0f };
+
 
     // Sprite用の頂点リソースにデータを書き込む
     VertexData* vertexDataSprite = nullptr;
@@ -1292,7 +1303,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
             commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
             // 描画。(DrawCall)。3頂点で1つのインスタンス。
-            commandList->DrawInstanced(3, 1, 0, 0);
+            commandList->DrawInstanced(6, 1, 0, 0);
 
             // Spriteの描画。変更が必要なものだけ変更する
             commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
@@ -1342,8 +1353,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
             assert(SUCCEEDED(hr));
             hr = commandList->Reset(commandAllocator, nullptr);
             assert(SUCCEEDED(hr));
-
-
         }
     }
 
