@@ -12,6 +12,7 @@
 #include <strsafe.h>
 #include <dxgidebug.h>
 #include <dxcapi.h>
+#include <vector>
 #include "externals/imgui/imgui.h"
 #include "externals/imgui/imgui_impl_dx12.h"
 #include "externals/imgui/imgui_impl_win32.h"
@@ -492,7 +493,7 @@ IDxcBlob* ConpileShader(
     }
 
     // 4.Compile結果を受け取って返す
-
+    
     // コンパイル結果から実行用のバイナリ部分を取得
     IDxcBlob* shaderBlob = nullptr;
     hr = shaderResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&shaderBlob), nullptr);
@@ -511,7 +512,8 @@ ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes)
 {
     // ヒーププロパティの設定 (UPLOADバッファを使用)
     D3D12_HEAP_PROPERTIES heapProperties = {};
-    heapProperties.Type = D3D12_HEAP_TYPE_UPLOAD; // バッファ用にUPLOADヒープタイプを使用
+    heapProperties.Type = D3D12_HEAP_TYPE_UPLOAD; 
+   
 
     // バッファリソースの設定
     D3D12_RESOURCE_DESC vertexResourceDesc = {};
@@ -603,7 +605,7 @@ ID3D12Resource* CreateTextureResource(ID3D12Device* device, const DirectX::TexMe
         &heapProperties,// Heapの設定
         D3D12_HEAP_FLAG_NONE,//Heapの特殊な設定。特になし
         &resourceDesc,// Resourceの設定
-        D3D12_RESOURCE_STATE_GENERIC_READ,// 初回のResourceState。Textureは基本読むだけ
+        D3D12_RESOURCE_STATE_COPY_DEST,// データ転送される設定
         nullptr,// Clear最適値。使わないのでnullptr
         IID_PPV_ARGS(&resource));// 作成するResourceポインタへのポインタ
     assert(SUCCEEDED(hr));
@@ -611,25 +613,25 @@ ID3D12Resource* CreateTextureResource(ID3D12Device* device, const DirectX::TexMe
 }
 
 // TextureResourceにデータを転送する関数
-void UploadTextureData(ID3D12Resource* texture, const DirectX::ScratchImage& mipImages)
+[[nodiscard]]
+ID3D12Resource* UploadTextureData(ID3D12Resource* texture, const DirectX::ScratchImage& mipImages, ID3D12Device* device,
+    ID3D12GraphicsCommandList* commandList)
 {
-    // Meta情報を取得
-    const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
-    // 全MipMapについて
-    for (size_t mipLevel = 0; mipLevel < metadata.mipLevels; ++mipLevel)
-    {
-        // MipMapLevelを指定して各Imageを取得
-        const DirectX::Image* img = mipImages.GetImage(mipLevel, 0, 0);
-        // Textureに転送
-        HRESULT hr = texture->WriteToSubresource(
-            UINT(mipLevel),
-            nullptr,// 全領域へのコピー
-            img->pixels,// 元データアドレス
-            UINT(img->rowPitch),// 1ラインサイズ
-            UINT(img->slicePitch)// 1枚サイズ
-        );
-        assert(SUCCEEDED(hr));
-    }
+    std::vector<D3D12_SUBRESOURCE_DATA>subresources;
+    DirectX::PrepareUpload(device, mipImages.GetImages(), mipImages.GetImageCount(), mipImages.GetMetadata(), subresources);
+    uint64_t intermediateSize = GetRequiredIntermediateSize(texture, 0, UINT(subresources.size()));
+    ID3D12Resource* intermediateResource = CreateBufferResource(device, intermediateSize);
+    UpdateSubresources(commandList, texture, intermediateResource, 0, 0, UINT(subresources.size()), subresources.data());
+    // Textureへの転送後は利用できるよう、D3D12_RESOURCE_STATE_COPY_DESTからD3D12_RESOURCE_STATE_GENERIC_READへResourceStateを変更する
+    D3D12_RESOURCE_BARRIER barrier{};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+    barrier.Transition.pResource = texture;
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+    barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_GENERIC_READ;
+    commandList->ResourceBarrier(1, &barrier);
+    return intermediateResource;
 }
 
 // Windowsアプリでのエントリーポイント(main関数)
@@ -1038,28 +1040,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
         IID_PPV_ARGS(&graphicsPipelineState));
     assert(SUCCEEDED(hr));
 
-    //// 頂点リソース用のヒープの設定
-    //D3D12_HEAP_PROPERTIES uploadHeapProperties{};
-    //uploadHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;// UploadHeapを使う
-    //// 頂点リソースの設定
-    //D3D12_RESOURCE_DESC vertexResourceDesc{};
-    //// バッファリソース。テキスチャの場合はまた別の設定をする
-    //vertexResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-    //vertexResourceDesc.Width = sizeof(Vector4) * 3;// リソースのサイズ。今回はVector4を3頂点分
-    //// バッファの場合はこれらは1にする決まり
-    //vertexResourceDesc.Height = 1;
-    //vertexResourceDesc.DepthOrArraySize = 1;
-    //vertexResourceDesc.MipLevels = 1;
-    //vertexResourceDesc.SampleDesc.Count = 1;
-    //// バッファの場合はこれにする決まり
-    //vertexResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-    //// 実際に頂点リソースを作る
-    //ID3D12Resource* vertexResource = nullptr;
-    //hr = device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
-    //    &vertexResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
-    //    IID_PPV_ARGS(&vertexResource));
-    //assert(SUCCEEDED(hr));
-
     // vertexResourceの作成
     ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 3);
     // マテリアル用のリソースを作る。今回はcolor1つ分のサイズを用意する
@@ -1134,7 +1114,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     DirectX::ScratchImage mipImages = LoadTexture("Resources/uvChecker.png");
     const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
     ID3D12Resource* textureResource = CreateTextureResource(device, metadata);
-    UploadTextureData(textureResource, mipImages);
+    /*UploadTextureData(textureResource, mipImages);*/
+    ID3D12Resource* intermediateResource = UploadTextureData(textureResource, mipImages, device, commandList);
 
     // metaDataを基にSRVの設定
     D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
@@ -1251,8 +1232,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
             // 描画。(DrawCall)。3頂点で1つのインスタンス。
             commandList->DrawInstanced(3, 1, 0, 0);
-
-           
 
             // 実際のcommandListのImGuiの描画コマンドを積む
             ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
