@@ -58,6 +58,7 @@ struct VertexData
 {
     Vector4 position;
     Vector2 texcoord;
+    Vector3 normal;
 };
 
 Matrix4x4 MakeIdentity4x4()
@@ -777,7 +778,13 @@ void DrawSphere(VertexData* vertexData)
             vertexData[start + 5].position = d;
             vertexData[start + 5].texcoord = { uNext, vNext };
             
-           
+            // 法線情報を追加する
+            for (int i = 0; i < 6; ++i) 
+            {
+                vertexData[start + i].normal.x = vertexData[start + i].position.x;
+                vertexData[start + i].normal.y = vertexData[start + i].position.y;
+                vertexData[start + i].normal.z = vertexData[start + i].position.z;
+            }
         }
     }
 }
@@ -1149,7 +1156,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     assert(SUCCEEDED(hr));
 
     // InputLayout
-    D3D12_INPUT_ELEMENT_DESC inputElementDescs[2] = {};
+    D3D12_INPUT_ELEMENT_DESC inputElementDescs[3] = {};
     inputElementDescs[0].SemanticName = "POSITION";
     inputElementDescs[0].SemanticIndex = 0;
     inputElementDescs[0].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
@@ -1158,6 +1165,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     inputElementDescs[1].SemanticIndex = 0;
     inputElementDescs[1].Format = DXGI_FORMAT_R32G32_FLOAT;
     inputElementDescs[1].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+    inputElementDescs[2].SemanticName = "NORMAL";
+    inputElementDescs[2].SemanticIndex = 0;
+    inputElementDescs[2].Format = DXGI_FORMAT_R32G32_FLOAT;
+    inputElementDescs[2].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
     D3D12_INPUT_LAYOUT_DESC inputLayoutDesc{};
     inputLayoutDesc.pInputElementDescs = inputElementDescs;
     inputLayoutDesc.NumElements = _countof(inputElementDescs);
@@ -1308,17 +1319,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     // 1枚目の三角形
     vertexDataSprite[0].position = { 0.0f,360.0f,0.0f,1.0f };// 左下
     vertexDataSprite[0].texcoord = { 0.0f,1.0f };
+    vertexDataSprite[0].normal = { 0.0f,0.0f,-1.0f };
     vertexDataSprite[1].position = { 0.0f,0.0f,0.0f,1.0f };// 左上
     vertexDataSprite[1].texcoord = { 0.0f,0.0f };
+    vertexDataSprite[1].normal = { 0.0f,0.0f,-1.0f };
     vertexDataSprite[2].position = { 640.0f,360.0f,0.0f,1.0f };// 右下
     vertexDataSprite[2].texcoord = { 1.0f,1.0f };
+    vertexDataSprite[2].normal = { 0.0f,0.0f,-1.0f };
     // 2枚目の三角形
     vertexDataSprite[3].position = { 0.0f,0.0f,0.0f,1.0f };// 左上
     vertexDataSprite[3].texcoord = { 0.0f,0.0f };
+    vertexDataSprite[3].normal = { 0.0f,0.0f,-1.0f };
     vertexDataSprite[4].position = { 640.0f,0.0f,0.0f,1.0f };// 右上
     vertexDataSprite[4].texcoord = { 1.0f,0.0f };
+    vertexDataSprite[4].normal = { 0.0f,0.0f,-1.0f };
     vertexDataSprite[5].position = { 640.0f,360.0f,0.0f,1.0f };// 右下
     vertexDataSprite[5].texcoord = { 1.0f,1.0f };
+    vertexDataSprite[5].normal = { 0.0f,0.0f,-1.0f };
 
     // ビューポート
     D3D12_VIEWPORT viewport{};
