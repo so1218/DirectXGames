@@ -13,6 +13,8 @@
 #include <dxgidebug.h>
 #include <dxcapi.h>
 #include <vector>
+#define _USE_MATH_DEFINES
+#include <cmath>
 #include "externals/imgui/imgui.h"
 #include "externals/imgui/imgui_impl_dx12.h"
 #include "externals/imgui/imgui_impl_win32.h"
@@ -337,6 +339,22 @@ Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip
     matrix.m[2][2] = farClip / (farClip - nearClip);
     matrix.m[2][3] = 1.0f;
     matrix.m[3][2] = (-farClip * nearClip) / (farClip - nearClip);
+    return matrix;
+}
+
+// ビューポート変換行列
+Matrix4x4 MakeViewportMatrix(float left, float top, float width, float height, float minDepth, float maxDepth)
+{
+    Matrix4x4 matrix = {};
+
+    matrix.m[0][0] = width / 2.0f;
+    matrix.m[1][1] = -height / 2.0f;
+    matrix.m[2][2] = maxDepth - minDepth;
+    matrix.m[3][0] = left + width / 2.0f;
+    matrix.m[3][1] = top + height / 2.0f;
+    matrix.m[3][2] = minDepth;
+    matrix.m[3][3] = 1.0f;
+
     return matrix;
 }
 
@@ -689,6 +707,83 @@ ID3D12Resource* CreateDepthStencilTextureResource(ID3D12Device* device, int32_t 
 bool DepthFunc(float currZ, float prevZ)
 {
     return currZ <= prevZ;
+}
+
+void DrawSphere(VertexData* vertexData)
+{
+    // 分割数
+    const uint32_t kSubdivision = 16;
+    // 経度分割一つ分の角度
+    const float kLonEvery = (2.0f * float(M_PI)) / float(kSubdivision);
+    // 緯度分割一つ分の角度
+    const float kLatEvery = (float(M_PI)) / float(kSubdivision);
+    // 緯度の方向に分割
+    for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
+        float lat = -float(M_PI) / 2.0f + kLatEvery * latIndex;
+        float latNext = lat + kLatEvery;
+        // 経度の方向に分割
+        for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
+            uint32_t start = (latIndex * kSubdivision + lonIndex) * 6;
+            float lon = kLonEvery * lonIndex;
+            float lonNext = lon + kLonEvery;
+            // 基準点の4頂点
+            Vector4 a = {
+                std::cosf(lat) * std::cosf(lon),
+                std::sinf(lat),
+                std::cosf(lat) * std::sinf(lon),
+                1.0f
+            };
+
+            Vector4 b = {
+                std::cosf(latNext) * std::cosf(lon),
+                std::sinf(latNext),
+                std::cosf(latNext) * std::sinf(lon),
+                1.0f
+            };
+
+            Vector4 c = {
+                std::cosf(lat) * std::cosf(lonNext),
+                std::sinf(lat),
+                std::cosf(lat) * std::sinf(lonNext),
+                1.0f
+            };
+
+            Vector4 d = {
+                std::cosf(latNext) * std::cosf(lonNext),
+                std::sinf(latNext),
+                std::cosf(latNext) * std::sinf(lonNext),
+                1.0f
+            };
+
+            // テクスチャ座標の補助
+            float u = float(lonIndex) / float(kSubdivision);
+            float uNext = float(lonIndex + 1) / float(kSubdivision);
+            float v = 1.0f - float(latIndex) / float(kSubdivision);
+            float vNext = 1.0f - float(latIndex + 1) / float(kSubdivision);
+
+            // 三角形1: a, b, c
+            vertexData[start + 0].position = a;
+            vertexData[start + 0].texcoord = { u, v };
+
+            vertexData[start + 1].position = b;
+            vertexData[start + 1].texcoord = { u, vNext };
+
+            vertexData[start + 2].position = c;
+            vertexData[start + 2].texcoord = { uNext, v };
+
+            // 三角形2: c, b, d
+            vertexData[start + 3].position = c;
+            vertexData[start + 3].texcoord = { uNext, v };
+
+            vertexData[start + 4].position = b;
+            vertexData[start + 4].texcoord = { u, vNext };
+
+            vertexData[start + 5].position = d;
+            vertexData[start + 5].texcoord = { uNext, vNext };
+            
+           
+        }
+    }
 }
 
 // Windowsアプリでのエントリーポイント(main関数)
@@ -1112,7 +1207,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     assert(SUCCEEDED(hr));
 
     // vertexResourceの作成
-    ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 6);
+    ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 1536);
     // マテリアル用のリソースを作る。今回はcolor1つ分のサイズを用意する
     ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(VertexData));
     // Spraite用の頂点リソースを作る
@@ -1150,7 +1245,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     // リソースの先頭のアドレスから使う
     vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
     // 使用するリソースのサイズは頂点3つ分のサイズ
-    vertexBufferView.SizeInBytes = sizeof(VertexData) * 6;
+    vertexBufferView.SizeInBytes = sizeof(VertexData) * 1536;
     // 1頂点あたりのサイズ
     vertexBufferView.StrideInBytes = sizeof(VertexData);
 
@@ -1230,7 +1325,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
     // Transform変数を作る
     Transform transform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f}, {0.0f,0.0f,0.0f} };
-    Transform cameraTransform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f}, {0.0f,0.0f,-5.00f} };
+    Transform cameraTransform{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f}, {0.0f,0.0f,-10.00f} };
     Transform transformSprite{ {1.0f,1.0f,1.0f},{0.0f,0.0f,0.0f},{0.0f,0.0f,0.0f} };
 
     float fovY = 0.45f;
@@ -1347,6 +1442,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
             Matrix4x4 viewMatrix = Inverse(cameraMatrix);
             Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(fovY, aspectRatio, nearClip, farClip);
             Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
+            // ViewportMatrixを作る
+            Matrix4x4 viewportMatrix = MakeViewportMatrix(0, 0, 1280, 720, 0.0f, 1.0f);
             *transfomationMatrixData = worldViewProjectionMatrix;
 
             // Sprite用のWorldViewProjectionMatrixを作る
@@ -1373,8 +1470,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
             // SRVのテーブル（t0）
             commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
+            DrawSphere(vertexData);
+
             // 描画。(DrawCall)。3頂点で1つのインスタンス。
-            commandList->DrawInstanced(6, 1, 0, 0);
+            commandList->DrawInstanced(1536, 1, 0, 0);
 
             // Spriteの描画。変更が必要なものだけ変更する
             commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
