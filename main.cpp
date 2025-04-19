@@ -530,7 +530,6 @@ ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes)
     D3D12_HEAP_PROPERTIES heapProperties = {};
     heapProperties.Type = D3D12_HEAP_TYPE_UPLOAD; 
    
-
     // バッファリソースの設定
     D3D12_RESOURCE_DESC vertexResourceDesc = {};
     vertexResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER; // バッファリソース
