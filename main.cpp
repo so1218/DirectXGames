@@ -61,6 +61,12 @@ struct VertexData
     Vector3 normal;
 };
 
+struct Material 
+{
+    Vector4 color;
+    int32_t enableLighting;
+};
+
 Matrix4x4 MakeIdentity4x4()
 {
     Matrix4x4 matrix{};
@@ -1235,7 +1241,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     // vertexResourceの作成
     ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 1536);
     // マテリアル用のリソースを作る。今回はcolor1つ分のサイズを用意する
-    ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(VertexData));
+    ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(Material));
+    // Sprite用のマテリアル用のリソースを作る。
+    ID3D12Resource* materialResourceSprite = CreateBufferResource(device, sizeof(VertexData));
     // Spraite用の頂点リソースを作る
     ID3D12Resource* vertexResourceSprite = CreateBufferResource(device, sizeof(VertexData) * 6);
     // DepthStencilTextureをウィンドウのサイズで作成
@@ -1243,10 +1251,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 
     // マテリアルにデータを書き込む
     Vector4* materialData = nullptr;
+    Material* materialDataSprite = nullptr;
     // 書き込むためのアドレスを取得
     materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData));
+    materialResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&materialDataSprite));
     // マテリアルの色
     *materialData = Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+    *materialDataSprite = { {0.0f,1.0f,1.0f,1.0f},false };
 
     // WVP用のリソースを作る。Matrix4x4 1つ分のサイズを用意する
     ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
@@ -1504,11 +1515,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
             Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
             Matrix4x4 worldViewProjectionMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
             *transformationMatrixDataSprite = worldViewProjectionMatrixSprite;
-
-            // マテリアルCBufferの場所を設定
-            commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
-            // wvp用のCBufferの場所を設定
-            commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
             
            /* commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);*/
 
@@ -1522,22 +1528,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
             // 描画用のDescripterHeapの設定
             ID3D12DescriptorHeap* descripterHeap[] = { srvDescriptorHeap };
             commandList->SetDescriptorHeaps(1, descripterHeap);
-
             // SRVのテーブル（t0）
             commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
-
+            // マテリアルCBufferの場所を設定
+            commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
+            // wvp用のCBufferの場所を設定
+            commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
             // 球の描画の設定の関数
             DrawSphere(vertexData);
-
             // 描画。(DrawCall)。3頂点で1つのインスタンス。
             commandList->DrawInstanced(1536, 1, 0, 0);
 
-            commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
-
             // Spriteの描画。変更が必要なものだけ変更する
-            commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+            commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
+            commandList->SetGraphicsRootConstantBufferView(0, materialResourceSprite->GetGPUVirtualAddress());
             // TransformationMatrixCBufferの場所を設定
             commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
+            commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
             // 描画。(DrawCall)
             commandList->DrawInstanced(6, 1, 0, 0);
 
