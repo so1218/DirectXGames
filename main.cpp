@@ -687,6 +687,11 @@ ID3D12Resource* CreateDepthStencilTextureResource(ID3D12Device* device, int32_t 
     return resource;
 }
 
+bool DepthFunc(float currZ, float prevZ)
+{
+    return currZ <= prevZ;
+}
+
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) 
 {
@@ -914,7 +919,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     ID3D12DescriptorHeap* srvDescriptorHeap = CreateDescripterHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 128, true);
     
     // DSV用のヒープでディスクリプタの数は1。DSVはShader内で触るものではないので、ShaderVisibleはfalse
-    ID3D12DescriptorHeap* dsvDescripterHeap = CreateDescripterHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
+    ID3D12DescriptorHeap* dsvDescriptorHeap = CreateDescripterHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
 
     // SwapChainからResourceを引っ張ってくる
     ID3D12Resource* swapChainResources[2] = { nullptr };
@@ -1070,6 +1075,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
         L"ps_6_0", dxcUtils, dxcCompiler, includeHandler);
     assert(pixelShaderBlob != nullptr);
 
+    // DepthStencilStateの設定
+    D3D12_DEPTH_STENCIL_DESC depthStencilDesc{};
+    //Depthの機能を有効化する
+    depthStencilDesc.DepthEnable = true;
+    // 書き込みをします
+    depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+    // 比較関数はLessEqual。つまり、近ければ描画される
+    depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+
     // PSOを生成する
     D3D12_GRAPHICS_PIPELINE_STATE_DESC graphicsPipelineStateDesc{};
     graphicsPipelineStateDesc.pRootSignature = rootSignature;// RootSignature
@@ -1078,6 +1092,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     vertexShaderBlob->GetBufferSize() };// VertexShader
     graphicsPipelineStateDesc.PS = { pixelShaderBlob->GetBufferPointer(),
     pixelShaderBlob->GetBufferSize() };// PixelShader
+    // DepthStencilの設定
+    graphicsPipelineStateDesc.DepthStencilState = depthStencilDesc;
+    graphicsPipelineStateDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
     graphicsPipelineStateDesc.BlendState = blendDesc;// BlendState
     graphicsPipelineStateDesc.RasterizerState = rasterizerDesc;// Rasterizer
     // 書き込むRTVの情報
@@ -1143,6 +1160,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     vertexBufferViewSprite.BufferLocation = vertexResourceSprite->GetGPUVirtualAddress();
     vertexBufferViewSprite.SizeInBytes = sizeof(VertexData) * 6;
     vertexBufferViewSprite.StrideInBytes = sizeof(VertexData);
+
+    // DSVの設定
+    D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
+    dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;// Format。基本的にはResourceに合わせる
+    dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;// 2dTexture
+    // DSVHeapの先頭にDSVをつくる
+    device->CreateDepthStencilView(depthStencilResource, &dsvDesc, dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 
     // 頂点リソースにデータを書き込む
     VertexData* vertexData = nullptr;
@@ -1214,14 +1238,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     float aspectRatio = 1280.0f / 720.0f;
     float nearClip = 0.1f;
     float farClip = 100.0f;
-
-
-    // DSVの設定
-    D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
-    dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;// Format。基本的にはResourceに合わせる
-    dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;// 2dTexture
-    // DSVHeapの先頭にDSVをつくる
-    device->CreateDepthStencilView(depthStencilResource, &dsvDesc, dsvDescripterHeap->GetCPUDescriptorHandleForHeapStart());
 
     // Textureを読んで転送する
     DirectX::ScratchImage mipImages = LoadTexture("Resources/uvChecker.png");
@@ -1307,6 +1323,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
             // 色。RGBAの順
             float clearColor[] = { 0.1f,0.25f,0.5f,1.0f };
             commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
+
+            // 描画先のRTVとDSVを設定する
+            D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+            commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, &dsvHandle);
+
+            // 指定した深度で画面全体をクリアする
+            commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
             commandList->RSSetViewports(1, &viewport);// Viewportを設定
             commandList->RSSetScissorRects(1, &scissorRect);// Scissorを設定
